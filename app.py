@@ -1,67 +1,86 @@
+from functools import wraps
 from flask import Flask, jsonify, request
 import psycopg
+from flasgger import Swagger
 import os
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-print(os.getenv("DATABASE_URL"))
-print(os.getenv("API_KEY"))
-
 API_KEY = os.getenv("API_KEY")
-
-app = Flask(__name__)
-
 DB_URL = os.getenv("DATABASE_URL")
+
 if not DB_URL:
     raise RuntimeError("DATABASE_URL environment variable is not set")
 
-
-def verify_api_key(request):
-    api_key = request.headers.get('X-API-KEY')
-    if api_key != API_KEY:
-        return jsonify({"error": "you need a valid api key"}), 403
-    return None
+app = Flask(__name__)
+Swagger(app)
 
 
-@app.route("/protected", methods=['GET'])
-def protected_resource():
-    verification_response = verify_api_key(request)
-    if verification_response:
-        return verification_response
-    return jsonify({"message": "this is a protected API!"})
+# --- API key decorator ---
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get("X-API-KEY")
+        if api_key != API_KEY:
+            return jsonify({"error": "you need a valid api key"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
 
 
-@app.route("/workouts/filter", methods=["POST"])
-def filter_workouts():
-    payload = request.get_json() or {}
-
-    type_filter = payload.get("type")
-    muscle_filter = payload.get("muscle")
-    level_filter = payload.get("level")
-
-    for name, val in (("type", type_filter), ("muscle", muscle_filter), ("level", level_filter)):
-        if val is not None and not isinstance(val, str):
-            return jsonify({"error": f"'{name}' must be a string"}), 400
+# --- General workouts endpoint ---
+@app.route("/workouts", methods=["GET"])
+@require_api_key
+def get_workouts():
+    """
+    Get all workouts or filter by type, muscle, level
+    ---
+    tags:
+      - Workouts
+    parameters:
+      - name: X-API-KEY
+        in: header
+        type: string
+        required: true
+        description: Your API key
+      - name: type
+        in: query
+        type: string
+        required: false
+        description: Filter by workout type
+      - name: muscle
+        in: query
+        type: string
+        required: false
+        description: Filter by muscle
+      - name: level
+        in: query
+        type: string
+        required: false
+        description: Filter by level
+    responses:
+      200:
+        description: List of workouts
+      403:
+        description: Invalid API key
+      500:
+        description: Database error
+    """
+    type_filter = request.args.get("type")
+    muscle_filter = request.args.get("muscle")
+    level_filter = request.args.get("level")
 
     try:
-        # Use psycopg 3 connection and dict_row factory
         with psycopg.connect(DB_URL, autocommit=True) as conn:
             with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-                query = (
-                    "SELECT id, type, name, muscles, equipment, instructions, level "
-                    "FROM workouts WHERE 1=1"
-                )
+                query = "SELECT id, type, name, muscles, equipment, instructions, level FROM workouts WHERE 1=1"
                 params = []
 
                 if type_filter:
                     query += " AND LOWER(type) = LOWER(%s)"
                     params.append(type_filter.strip())
                 if muscle_filter:
-                    query += (
-                        " AND EXISTS (SELECT 1 FROM unnest(muscles) m "
-                        "WHERE LOWER(m) = LOWER(%s))"
-                    )
+                    query += " AND EXISTS (SELECT 1 FROM unnest(muscles) m WHERE LOWER(m) = LOWER(%s))"
                     params.append(muscle_filter.strip())
                 if level_filter:
                     query += " AND LOWER(level) = LOWER(%s)"
@@ -72,11 +91,29 @@ def filter_workouts():
                 workouts = [dict(row) for row in rows]
 
     except psycopg.Error as e:
-        app.logger.exception("Database error while filtering workouts")
+        app.logger.exception("Database error while fetching workouts")
         return jsonify({"error": "database error", "detail": str(e)}), 500
 
     return jsonify({"count": len(workouts), "workouts": workouts})
 
 
+# --- Protected endpoint ---
+@app.route("/protected", methods=["GET"])
+@require_api_key
+def protected_resource():
+    """
+    Protected endpoint
+    ---
+    tags:
+      - Authentication
+    responses:
+      200:
+        description: Successful response
+      403:
+        description: Invalid API key
+    """
+    return jsonify({"message": "this is a protected API!"})
+
+
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8000)))
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8000)))

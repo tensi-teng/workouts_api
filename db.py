@@ -1,11 +1,15 @@
 import psycopg
 import json
+import os
+from dotenv import load_dotenv
 
-# Connect to PostgreSQL
-DB_URL = "postgresql://<username>:<password>@<host>/<database>"
+load_dotenv()
+DB_URL = os.getenv("DATABASE_URL")  
+if not DB_URL:
+    raise RuntimeError("DATABASE_URL environment variable is not set")
 
-with psycopg.connect(DB_URL, autocommit=True) as conn:  # autocommit avoids explicit commit for DDL
-    with conn.cursor() as cur:
+
+with psycopg.connect(DB_URL, autocommit=True) as conn:  
         # Drop and create table
         cur.execute("""
         DROP TABLE IF EXISTS workouts;

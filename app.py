@@ -3,14 +3,19 @@ import psycopg2 as psycopg
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+
+
+load_dotenv(dotenv_path=r"C:\Users\USER\API\.env")
+
 API_KEY = os.getenv("API_KEY")
+print("Loaded API_KEY:", API_KEY)
+
 
 app = Flask(__name__)
 
-# DB_URL = os.getenv("DATABASE_URL")
-# if not DB_URL:
-#     raise RuntimeError("DATABASE_URL environment variable is not set")
+DB_URL = os.getenv("DATABASE_URL")
+if not DB_URL:
+    raise RuntimeError("DATABASE_URL environment variable is not set")
 
 def verify_api_key(request):
     api_key = request.headers.get('X-API-KEY')

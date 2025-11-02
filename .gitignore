@@ -30,5 +30,3 @@ dist/
 
 # All json files
 *.json
-
-.env

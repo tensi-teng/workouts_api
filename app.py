@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 
 
-load_dotenv(dotenv_path=r"C:\Users\USER\API\.env")
+load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
 print("Loaded API_KEY:", API_KEY)

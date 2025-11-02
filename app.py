@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+print(os.getenv("DATABASE_URL"))
+print(os.getenv("API_KEY"))
 
 API_KEY = os.getenv("API_KEY")
 
